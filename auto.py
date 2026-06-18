@@ -3,7 +3,7 @@ import time
 import sys
 import traceback
 from datetime import datetime
-from pywinauto import Desktop, Application, ElementNotFoundError
+from pywinauto import Application, ElementNotFoundError
 from pywinauto.findwindows import find_elements
 
 LOG_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -31,17 +31,7 @@ def listar_janelas():
 
 
 def encontrar_janela_raiz():
-    """Tenta encontrar a janela do MEGA ERP, retorna Desktop como fallback."""
-    desktop = Desktop(backend="uia")
-    try:
-        campo = desktop.child_window(
-            automation_id="66786", control_type="Edit"
-        ).wait("visible", timeout=3)
-        print("  -> Encontrado direto no Desktop.")
-        return desktop, None
-    except ElementNotFoundError:
-        pass
-
+    """Encontra a janela principal do MEGA ERP pelo nome."""
     elems = find_elements(control_type="Window", backend="uia")
     for e in elems:
         nome = e.name if e.name else ""
@@ -88,13 +78,12 @@ def main():
     # --- PASSO 3: clicar em "Sim" (confirmar) ---
     print("Passo 3/3: Confirmando exclusao...")
     time.sleep(1)
-    desktop = Desktop(backend="uia")
     try:
         btn_sim = raiz.child_window(
             automation_id="1578668", control_type="Button"
         ).wait("visible", timeout=5)
     except ElementNotFoundError:
-        btn_sim = desktop.child_window(
+        btn_sim = app.window(
             automation_id="1578668", control_type="Button"
         ).wait("visible", timeout=5)
     btn_sim.click()
