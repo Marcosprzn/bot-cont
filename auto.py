@@ -58,7 +58,7 @@ def main():
     # --- PASSO 1: digitar codigo no campo Edit ---
     print("Passo 1/3: Digitando codigo 100283...")
     campo = raiz.child_window(
-        automation_id="66786", control_type="Edit"
+        auto_id="66786", control_type="Edit"
     ).wait("visible", timeout=8)
     campo.set_focus()
     campo.select()
@@ -69,7 +69,7 @@ def main():
     # --- PASSO 2: clicar em "Excluir" ---
     print("Passo 2/3: Clicando em Excluir...")
     btn_excluir = raiz.child_window(
-        automation_id="66792", control_type="Button"
+        auto_id="66792", control_type="Button"
     ).wait("visible", timeout=8)
     btn_excluir.click()
     time.sleep(0.5)
@@ -80,11 +80,11 @@ def main():
     time.sleep(1)
     try:
         btn_sim = raiz.child_window(
-            automation_id="1578668", control_type="Button"
+            auto_id="1578668", control_type="Button"
         ).wait("visible", timeout=5)
     except ElementNotFoundError:
         btn_sim = app.window(
-            automation_id="1578668", control_type="Button"
+            auto_id="1578668", control_type="Button"
         ).wait("visible", timeout=5)
     btn_sim.click()
     print("  OK")
