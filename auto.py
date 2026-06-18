@@ -162,10 +162,12 @@ def focar_mega(janela):
 
 def digitar_texto(texto, x, y):
     aguardar_se_pausado()
-    pyautogui.click(x, y)
+    pyautogui.doubleClick(x, y)
     time.sleep(0.15)
     pyautogui.hotkey("ctrl", "a")
     time.sleep(0.1)
+    pyautogui.press("backspace")
+    time.sleep(0.05)
     pyautogui.write(texto, interval=0.02)
     return True
 
