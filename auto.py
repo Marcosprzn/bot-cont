@@ -143,6 +143,11 @@ def processar_codigo(codigo, idx, total):
     print("OK")
     time.sleep(0.2)
 
+    print("  - Clicando Procurar...", end=" ")
+    clicar(433, 142)
+    print("OK")
+    time.sleep(0.3)
+
     print("  - Clicando Excluir...", end=" ")
     clicar(1231, 148)
     print("OK")
