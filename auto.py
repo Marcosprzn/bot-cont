@@ -2,7 +2,6 @@ import os
 import time
 import sys
 import ctypes
-import threading
 import traceback
 from datetime import datetime
 
@@ -18,13 +17,15 @@ pausado = False
 
 
 def esconder_console():
-    janela = ctypes.windll.kernel32.GetConsoleWindow()
-    ctypes.windll.user32.ShowWindow(janela, 0)
+    ctypes.windll.user32.ShowWindow(
+        ctypes.windll.kernel32.GetConsoleWindow(), 0
+    )
 
 
 def mostrar_console():
-    janela = ctypes.windll.kernel32.GetConsoleWindow()
-    ctypes.windll.user32.ShowWindow(janela, 1)
+    ctypes.windll.user32.ShowWindow(
+        ctypes.windll.kernel32.GetConsoleWindow(), 1
+    )
 
 
 def alternar_pausa():
@@ -89,65 +90,33 @@ def focar_janela(janela):
         pass
 
 
-def digitar_texto(raiz, app, texto, auto_id, control_type, x, y):
+def botao_sim_existe():
+    """Verifica se o botao 'Sim' (popup de confirmacao) ainda esta visivel."""
+    try:
+        botoes = find_elements(control_type="Button", backend="uia")
+        for b in botoes:
+            if b.name and b.name.strip() == "Sim":
+                return True
+    except Exception:
+        pass
+    return False
+
+
+def digitar_texto(texto, x, y):
     aguardar_se_pausado()
-
-    try:
-        campo = raiz.child_window(
-            auto_id=auto_id, control_type=control_type
-        ).wait("visible", timeout=4)
-        campo.set_focus()
-        campo.select()
-        time.sleep(0.2)
-        campo.type_keys(texto, with_spaces=False)
-        return True
-    except Exception:
-        pass
-
-    try:
-        campo = app.window(
-            auto_id=auto_id, control_type=control_type
-        ).wait("visible", timeout=4)
-        campo.set_focus()
-        campo.select()
-        time.sleep(0.2)
-        campo.type_keys(texto, with_spaces=False)
-        return True
-    except Exception:
-        pass
-
     try:
         pyautogui.click(x, y)
-        time.sleep(0.3)
+        time.sleep(0.15)
         pyautogui.hotkey("ctrl", "a")
-        time.sleep(0.2)
+        time.sleep(0.1)
         pyautogui.write(texto)
         return True
     except Exception:
         return False
 
 
-def clicar_botao(raiz, app, auto_id, control_type, x, y):
+def clicar(x, y):
     aguardar_se_pausado()
-
-    try:
-        btn = raiz.child_window(
-            auto_id=auto_id, control_type=control_type
-        ).wait("visible", timeout=4)
-        btn.click()
-        return True
-    except Exception:
-        pass
-
-    try:
-        btn = app.window(
-            auto_id=auto_id, control_type=control_type
-        ).wait("visible", timeout=4)
-        btn.click()
-        return True
-    except Exception:
-        pass
-
     try:
         pyautogui.click(x, y)
         return True
@@ -155,41 +124,40 @@ def clicar_botao(raiz, app, auto_id, control_type, x, y):
         return False
 
 
-def processar_codigo(raiz, app, codigo, total, idx):
+def esperar_exclusao(timeout=30):
+    """Aguarda o popup de confirmacao ('Sim') fechar apos exclusao."""
+    for _ in range(timeout * 2):
+        aguardar_se_pausado()
+        if not botao_sim_existe():
+            time.sleep(0.3)
+            return True
+        time.sleep(0.5)
+    return False
+
+
+def processar_codigo(codigo):
     aguardar_se_pausado()
-    focar_janela(raiz)
-    time.sleep(0.3)
 
-    status = digitar_texto(
-        raiz, app,
-        texto=str(codigo),
-        auto_id="66786", control_type="Edit",
-        x=343, y=147,
-    )
-    if not status:
+    if not digitar_texto(str(codigo), 343, 147):
+        return False
+    time.sleep(0.2)
+
+    if not clicar(1231, 148):
         return False
     time.sleep(0.3)
 
-    status = clicar_botao(
-        raiz, app,
-        auto_id="66792", control_type="Button",
-        x=1231, y=148,
-    )
-    if not status:
+    if not clicar(665, 424):
         return False
-    time.sleep(0.5)
 
-    status = clicar_botao(
-        raiz, app,
-        auto_id="1578668", control_type="Button",
-        x=665, y=424,
-    )
-    return status
+    if not esperar_exclusao():
+        return False
+
+    return True
 
 
 def main():
     pyautogui.FAILSAFE = True
-    pyautogui.PAUSE = 0.1
+    pyautogui.PAUSE = 0.05
 
     print("=" * 55)
     print("  BOT MEGA ERP - Exclusao em Lote")
@@ -215,10 +183,8 @@ def main():
 
     raiz, app = encontrar_janela_raiz()
 
-    # inicia listener do F8 em segundo plano
     iniciar_listener_f8()
 
-    # esconde o console para nao roubar foco
     time.sleep(0.5)
     esconder_console()
     time.sleep(0.5)
@@ -227,23 +193,25 @@ def main():
     sucessos = 0
     falhas = 0
     tempo_inicio = time.time()
+    ultimo_log = time.time()
 
     try:
         for i, codigo in enumerate(range(inicio, fim + 1), 1):
             aguardar_se_pausado()
             focar_janela(raiz)
 
-            ok = processar_codigo(raiz, app, codigo, total, i)
+            ok = processar_codigo(codigo)
             if ok:
                 sucessos += 1
             else:
                 falhas += 1
 
-            # mostra progresso no terminal mesmo invisivel
-            print(f"[{i}/{total}] Codigo {codigo}: {'OK' if ok else 'FALHA'}")
-
-            # pequena pausa entre ciclos
-            time.sleep(0.5)
+            agora = time.time()
+            if agora - ultimo_log >= 2:
+                decorrido = int(agora - tempo_inicio)
+                print(f"[{i}/{total}] Codigo {codigo}: {'OK' if ok else 'FALHA'} "
+                      f"({decorrido // 60}m {decorrido % 60}s)")
+                ultimo_log = agora
 
     except KeyboardInterrupt:
         print("\n\n[!] Interrompido pelo usuario.")
@@ -259,6 +227,7 @@ def main():
         decorrido = int(time.time() - tempo_inicio)
         print(f"  Tempo total:       {decorrido // 60}m {decorrido % 60}s")
         print("=" * 55)
+        input("Pressione Enter para sair...")
 
 
 if __name__ == "__main__":
