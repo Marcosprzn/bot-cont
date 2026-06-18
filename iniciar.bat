@@ -3,6 +3,19 @@ title Bot MEGA ERP - Instalador e Iniciador
 chcp 65001 >nul
 
 :: ============================================
+:: VERIFICAR ADMINISTRADOR
+:: ============================================
+>nul 2>&1 "%SYSTEMROOT%\system32\cacls.exe" "%SYSTEMROOT%\system32\config\system"
+if %errorlevel% neq 0 (
+    echo Este script requer privilegios de administrador.
+    echo Reiniciando como administrador...
+    powershell -Command "Start-Process '%~f0' -Verb RunAs"
+    exit /b
+)
+echo Privilegios de administrador OK.
+echo.
+
+:: ============================================
 :: VERIFICAR WINDOWS ARCH (32 ou 64 bits)
 :: ============================================
 if "%PROCESSOR_ARCHITECTURE%"=="AMD64" set ARCH=64
