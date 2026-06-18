@@ -26,6 +26,7 @@ python auto.py
 if %errorlevel% neq 0 (
     echo.
     echo [ERRO] O script encontrou um problema.
+    echo Log salvo em: %~dp0erro_auto.txt
 ) else (
     echo.
     echo Automacao concluida com sucesso!

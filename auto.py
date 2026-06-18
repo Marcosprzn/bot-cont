@@ -1,17 +1,33 @@
+import os
 import time
 import sys
+import traceback
+from datetime import datetime
 from pywinauto import Desktop, Application, ElementNotFoundError
 from pywinauto.findwindows import find_elements
 
+LOG_DIR = os.path.dirname(os.path.abspath(__file__))
+LOG_FILE = os.path.join(LOG_DIR, "erro_auto.txt")
+
+
+def log_erro(mensagem):
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with open(LOG_FILE, "a", encoding="utf-8") as f:
+        f.write(f"=== {timestamp} ===\n")
+        f.write(mensagem)
+        f.write("\n\n")
+
 
 def listar_janelas():
-    print("\n--- Janelas abertas ---")
+    texto = "\n--- Janelas abertas ---\n"
     elems = find_elements(control_type="Window", backend="uia")
     for e in elems:
         nome = e.name if e.name else ""
         if nome.strip():
-            print(f"  - '{nome}' (handle: {e.handle})")
-    print("------------------------\n")
+            texto += f"  - '{nome}' (handle: {e.handle})\n"
+    texto += "------------------------\n"
+    print(texto)
+    return texto
 
 
 def main():
@@ -47,7 +63,6 @@ def main():
             break
 
     if janela_info is None:
-        listar_janelas()
         raise ElementNotFoundError(
             "Campo 66786 nao encontrado em lugar nenhum.\n"
             "Confirme que o MEGA ERP esta aberto, visivel, e no campo correto."
@@ -74,8 +89,17 @@ if __name__ == "__main__":
     try:
         main()
     except ElementNotFoundError as e:
+        erro = traceback.format_exc()
+        janelas = listar_janelas()
+        msg = f"Erro: Campo nao encontrado\n{e}\n\n{erro}\n{janelas}"
+        log_erro(msg)
         print(f"\nErro: Campo nao encontrado - {e}")
+        print(f"Log salvo em: {LOG_FILE}")
         sys.exit(1)
     except Exception as e:
+        erro = traceback.format_exc()
+        msg = f"Erro inesperado\n{e}\n\n{erro}"
+        log_erro(msg)
         print(f"\nErro inesperado: {e}")
+        print(f"Log salvo em: {LOG_FILE}")
         sys.exit(1)
