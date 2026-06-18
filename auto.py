@@ -188,8 +188,12 @@ def main():
     raiz, app = encontrar_janela_raiz()
     iniciar_listener_f8()
 
-    time.sleep(0.5)
     focar_mega(raiz)
+
+    print("Iniciando em 5 segundos... Mova o mouse para o MEGA ERP.")
+    for s in range(5, 0, -1):
+        print(f"  {s}...")
+        time.sleep(1)
 
     sucessos = 0
     falhas = 0
