@@ -1,6 +1,7 @@
 import os
 import time
 import sys
+import ctypes
 import traceback
 from datetime import datetime
 
@@ -10,16 +11,19 @@ from pywinauto import Application, ElementNotFoundError
 from pywinauto.findwindows import find_elements
 
 LOG_DIR = os.path.dirname(os.path.abspath(__file__))
-LOG_FILE = os.path.join(LOG_DIR, "erro_auto.txt")
+LOG_ERRO = os.path.join(LOG_DIR, "erro_auto.txt")
+LOG_PROGRESSO = os.path.join(LOG_DIR, "progresso.log")
+LOG_PROGRESSO_TEMP = os.path.join(LOG_DIR, "progresso.tmp")
 
 pausado = False
+console_oculto = False
 
 
 def alternar_pausa():
     global pausado
     pausado = not pausado
     status = "PAUSADO" if pausado else "CONTINUANDO"
-    print(f"\n  [{status}] F8 para alternar\n")
+    p(f"\n  [{status}] F8 para alternar\n")
 
 
 def iniciar_listener_f8():
@@ -31,9 +35,35 @@ def aguardar_se_pausado():
         time.sleep(0.3)
 
 
+def _esconder_console():
+    global console_oculto
+    ctypes.windll.user32.ShowWindow(
+        ctypes.windll.kernel32.GetConsoleWindow(), 0
+    )
+    console_oculto = True
+
+
+def _mostrar_console():
+    global console_oculto
+    ctypes.windll.user32.ShowWindow(
+        ctypes.windll.kernel32.GetConsoleWindow(), 1
+    )
+    console_oculto = False
+
+
+def p(msg, end="\n"):
+    timestamp = datetime.now().strftime("%H:%M:%S")
+    if console_oculto:
+        with open(LOG_PROGRESSO_TEMP, "a", encoding="utf-8") as f:
+            f.write(f"[{timestamp}] {msg}{end}")
+    else:
+        print(msg, end=end)
+        sys.stdout.flush()
+
+
 def log_erro(mensagem):
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    with open(LOG_FILE, "a", encoding="utf-8") as f:
+    with open(LOG_ERRO, "a", encoding="utf-8") as f:
         f.write(f"=== {timestamp} ===\n")
         f.write(mensagem)
         f.write("\n\n")
@@ -199,38 +229,37 @@ def esperar_exclusao(timeout=40):
 
 
 def processar_codigo(codigo, idx, total):
-    print(f"\n[{idx}/{total}] Codigo {codigo}")
-    sys.stdout.flush()
+    p(f"\n[{idx}/{total}] Codigo {codigo}")
 
     aguardar_se_pausado()
 
-    print("  - Digitando codigo...", end=" ")
+    p("  - Digitando codigo... ", end="")
     digitar_texto(str(codigo), 343, 147)
-    print("OK")
+    p("OK")
 
-    print("  - Clicando Procurar...", end=" ")
+    p("  - Clicando Procurar... ", end="")
     clicar(433, 142)
-    print("OK")
+    p("OK")
 
-    print("  - Aguardando carregamento...", end=" ")
+    p("  - Aguardando carregamento... ", end="")
     esperar_carregamento()
-    print("OK")
+    p("OK")
 
-    print("  - Clicando Excluir...", end=" ")
+    p("  - Clicando Excluir... ", end="")
     clicar(1231, 148)
-    print("OK")
+    p("OK")
 
-    print("  - Aguardando popup Sim...", end=" ")
+    p("  - Aguardando popup Sim... ", end="")
     esperar_popup_sim()
-    print("OK")
+    p("OK")
 
-    print("  - Confirmando Sim...", end=" ")
+    p("  - Confirmando Sim... ", end="")
     clicar(665, 424)
-    print("OK")
+    p("OK")
 
-    print("  - Aguardando exclusao...", end=" ")
+    p("  - Aguardando exclusao... ", end="")
     esperar_exclusao()
-    print("OK")
+    p("OK")
 
     return True
 
@@ -271,6 +300,16 @@ def main():
         print(f"  {s}...")
         time.sleep(1)
 
+    # limpa log de progresso e esconde console
+    with open(LOG_PROGRESSO_TEMP, "w", encoding="utf-8") as f:
+        f.write(f"Progresso: {inicio} ate {fim} ({total} codigos)\n\n")
+    time.sleep(0.3)
+    focar_mega(raiz)
+    time.sleep(0.3)
+    _esconder_console()
+    time.sleep(0.3)
+    focar_mega(raiz)
+
     sucessos = 0
     falhas = 0
     tempo_inicio = time.time()
@@ -287,8 +326,11 @@ def main():
                 falhas += 1
 
     except KeyboardInterrupt:
-        print("\n\n[!] Interrompido pelo usuario.")
+        p("[!] Interrompido pelo usuario.")
     finally:
+        _mostrar_console()
+        time.sleep(0.5)
+        decorrido = int(time.time() - tempo_inicio)
         print()
         print("=" * 55)
         print("  RESUMO FINAL")
@@ -296,8 +338,8 @@ def main():
         print(f"  Total processados: {total}")
         print(f"  Sucessos:          {sucessos}")
         print(f"  Falhas:            {falhas}")
-        decorrido = int(time.time() - tempo_inicio)
         print(f"  Tempo total:       {decorrido // 60}m {decorrido % 60}s")
+        print(f"  Log de progresso:  {LOG_PROGRESSO_TEMP}")
         print("=" * 55)
         input("Pressione Enter para sair...")
 
@@ -311,12 +353,12 @@ if __name__ == "__main__":
         msg = f"Erro: Campo nao encontrado\n{e}\n\n{erro}\n{janelas}"
         log_erro(msg)
         print(f"\nErro: Campo nao encontrado - {e}")
-        print(f"Log salvo em: {LOG_FILE}")
+        print(f"Log salvo em: {LOG_ERRO}")
         sys.exit(1)
     except Exception as e:
         erro = traceback.format_exc()
         msg = f"Erro inesperado\n{e}\n\n{erro}"
         log_erro(msg)
         print(f"\nErro inesperado: {e}")
-        print(f"Log salvo em: {LOG_FILE}")
+        print(f"Log salvo em: {LOG_ERRO}")
         sys.exit(1)
