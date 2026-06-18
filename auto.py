@@ -3,6 +3,7 @@ import time
 import sys
 import traceback
 from datetime import datetime
+import pyautogui
 from pywinauto import Application, ElementNotFoundError
 from pywinauto.findwindows import find_elements
 
@@ -31,7 +32,6 @@ def listar_janelas():
 
 
 def encontrar_janela_raiz():
-    """Encontra a janela principal do MEGA ERP pelo nome."""
     elems = find_elements(control_type="Window", backend="uia")
     for e in elems:
         nome = e.name if e.name else ""
@@ -41,55 +41,138 @@ def encontrar_janela_raiz():
             janela = app.window(handle=e.handle)
             janela.set_focus()
             return janela, app
-
     raise ElementNotFoundError(
         "MEGA ERP nao encontrado.\n"
         "Confirme que o programa esta aberto e visivel."
     )
 
 
+def digitar_texto(raiz, app, texto, auto_id, control_type, x, y, descricao):
+    print(f"  {descricao}: ", end="")
+    sys.stdout.flush()
+
+    # Tentativa 1: UIA na janela raiz
+    try:
+        campo = raiz.child_window(
+            auto_id=auto_id, control_type=control_type
+        ).wait("visible", timeout=4)
+        campo.set_focus()
+        campo.select()
+        time.sleep(0.2)
+        campo.type_keys(texto, with_spaces=False)
+        print("OK (UIA)")
+        return True
+    except Exception:
+        pass
+
+    # Tentativa 2: UIA no app
+    try:
+        campo = app.window(
+            auto_id=auto_id, control_type=control_type
+        ).wait("visible", timeout=4)
+        campo.set_focus()
+        campo.select()
+        time.sleep(0.2)
+        campo.type_keys(texto, with_spaces=False)
+        print("OK (UIA app)")
+        return True
+    except Exception:
+        pass
+
+    # Tentativa 3: pyautogui (fallback coordenadas)
+    try:
+        pyautogui.click(x, y)
+        time.sleep(0.3)
+        pyautogui.hotkey("ctrl", "a")
+        time.sleep(0.2)
+        pyautogui.write(texto)
+        print("OK (pyautogui)")
+        return True
+    except Exception:
+        print("FALHOU")
+        return False
+
+
+def clicar_botao(raiz, app, auto_id, control_type, x, y, descricao):
+    print(f"  {descricao}: ", end="")
+    sys.stdout.flush()
+
+    # Tentativa 1: UIA na janela raiz
+    try:
+        btn = raiz.child_window(
+            auto_id=auto_id, control_type=control_type
+        ).wait("visible", timeout=4)
+        btn.click()
+        print("OK (UIA)")
+        return True
+    except Exception:
+        pass
+
+    # Tentativa 2: UIA no app
+    try:
+        btn = app.window(
+            auto_id=auto_id, control_type=control_type
+        ).wait("visible", timeout=4)
+        btn.click()
+        print("OK (UIA app)")
+        return True
+    except Exception:
+        pass
+
+    # Tentativa 3: pyautogui (fallback coordenadas)
+    try:
+        pyautogui.click(x, y)
+        print(f"OK (pyautogui)")
+        return True
+    except Exception:
+        print("FALHOU")
+        return False
+
+
 def main():
+    pyautogui.FAILSAFE = True
+
     print("Aguardando 5 segundos...")
     time.sleep(5)
 
     raiz, app = encontrar_janela_raiz()
     time.sleep(0.5)
 
-    # --- PASSO 1: digitar codigo no campo Edit ---
-    print("Passo 1/3: Digitando codigo 100283...")
-    campo = raiz.child_window(
-        auto_id="66786", control_type="Edit"
-    ).wait("visible", timeout=8)
-    campo.set_focus()
-    campo.select()
-    time.sleep(0.3)
-    campo.type_keys("100283", with_spaces=False)
-    print("  OK")
+    print("\n--- Executando passos ---")
 
-    # --- PASSO 2: clicar em "Excluir" ---
-    print("Passo 2/3: Clicando em Excluir...")
-    btn_excluir = raiz.child_window(
-        auto_id="66792", control_type="Button"
-    ).wait("visible", timeout=8)
-    btn_excluir.click()
+    passo1 = digitar_texto(
+        raiz, app,
+        texto="100283",
+        auto_id="66786", control_type="Edit",
+        x=343, y=147,
+        descricao="Passo 1/3 - Digitar codigo"
+    )
     time.sleep(0.5)
-    print("  OK")
 
-    # --- PASSO 3: clicar em "Sim" (confirmar) ---
-    print("Passo 3/3: Confirmando exclusao...")
+    passo2 = clicar_botao(
+        raiz, app,
+        auto_id="66792", control_type="Button",
+        x=1231, y=148,
+        descricao="Passo 2/3 - Clicar Excluir"
+    )
     time.sleep(1)
-    try:
-        btn_sim = raiz.child_window(
-            auto_id="1578668", control_type="Button"
-        ).wait("visible", timeout=5)
-    except ElementNotFoundError:
-        btn_sim = app.window(
-            auto_id="1578668", control_type="Button"
-        ).wait("visible", timeout=5)
-    btn_sim.click()
-    print("  OK")
 
-    print("\nAutomacao concluida com sucesso!")
+    passo3 = clicar_botao(
+        raiz, app,
+        auto_id="1578668", control_type="Button",
+        x=665, y=424,
+        descricao="Passo 3/3 - Clicar Sim"
+    )
+
+    print("\n--- Resumo ---")
+    print(f"  Passo 1: {'OK' if passo1 else 'FALHOU'}")
+    print(f"  Passo 2: {'OK' if passo2 else 'FALHOU'}")
+    print(f"  Passo 3: {'OK' if passo3 else 'FALHOU'}")
+
+    if passo1 and passo2 and passo3:
+        print("\nAutomacao concluida com sucesso!")
+    else:
+        print("\nAutomacao concluida com falhas em alguns passos.")
 
 
 if __name__ == "__main__":

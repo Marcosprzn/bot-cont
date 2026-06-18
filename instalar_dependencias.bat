@@ -85,9 +85,10 @@ python --version
 :: ============================================
 :INSTALL_DEPS
 echo.
-echo Instalando dependencias (pywinauto)...
+echo Instalando dependencias (pywinauto + pyautogui)...
 python -m pip install --upgrade pip --quiet
 python -m pip install pywinauto --quiet
+python -m pip install pyautogui --quiet
 
 if %errorlevel% neq 0 (
     echo.
