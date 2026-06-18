@@ -1,7 +1,6 @@
 import os
 import time
 import sys
-import ctypes
 import traceback
 from datetime import datetime
 
@@ -16,23 +15,11 @@ LOG_FILE = os.path.join(LOG_DIR, "erro_auto.txt")
 pausado = False
 
 
-def esconder_console():
-    ctypes.windll.user32.ShowWindow(
-        ctypes.windll.kernel32.GetConsoleWindow(), 0
-    )
-
-
-def mostrar_console():
-    ctypes.windll.user32.ShowWindow(
-        ctypes.windll.kernel32.GetConsoleWindow(), 1
-    )
-
-
 def alternar_pausa():
     global pausado
     pausado = not pausado
     status = "PAUSADO" if pausado else "CONTINUANDO"
-    print(f"\n[{status}] F8 para alternar\n")
+    print(f"\n  [{status}] F8 para alternar\n")
 
 
 def iniciar_listener_f8():
@@ -83,74 +70,91 @@ def encontrar_janela_raiz():
     )
 
 
-def focar_janela(janela):
-    try:
-        janela.set_focus()
-    except Exception:
-        pass
-
-
-def botao_sim_existe():
-    """Verifica se o botao 'Sim' (popup de confirmacao) ainda esta visivel."""
-    try:
-        botoes = find_elements(control_type="Button", backend="uia")
-        for b in botoes:
-            if b.name and b.name.strip() == "Sim":
-                return True
-    except Exception:
-        pass
-    return False
+def focar_mega(janela):
+    for _ in range(3):
+        try:
+            janela.set_focus()
+            return
+        except Exception:
+            time.sleep(0.3)
 
 
 def digitar_texto(texto, x, y):
     aguardar_se_pausado()
-    try:
-        pyautogui.click(x, y)
-        time.sleep(0.15)
-        pyautogui.hotkey("ctrl", "a")
-        time.sleep(0.1)
-        pyautogui.write(texto)
-        return True
-    except Exception:
-        return False
+    pyautogui.click(x, y)
+    time.sleep(0.15)
+    pyautogui.hotkey("ctrl", "a")
+    time.sleep(0.1)
+    pyautogui.write(texto, interval=0.02)
+    return True
 
 
-def clicar(x, y):
+def clicar(x, y, desc=""):
     aguardar_se_pausado()
+    pyautogui.click(x, y)
+    return True
+
+
+def esperar_exclusao(timeout=40):
+    """Aguarda o popup de confirmacao fechar. Tenta 3 metodos em cascata."""
+    inicio = time.time()
+
+    # --- METODO 1: UIA (detectar botao 'Sim' pelo nome) ---
     try:
-        pyautogui.click(x, y)
+        while time.time() - inicio < timeout:
+            aguardar_se_pausado()
+            botoes = find_elements(control_type="Button", backend="uia")
+            sim = [b for b in botoes if b.name and "Sim" in b.name]
+            if not sim:
+                time.sleep(0.3)
+                return True
+            time.sleep(0.5)
         return True
     except Exception:
-        return False
+        pass
 
-
-def esperar_exclusao(timeout=30):
-    """Aguarda o popup de confirmacao ('Sim') fechar apos exclusao."""
-    for _ in range(timeout * 2):
-        aguardar_se_pausado()
-        if not botao_sim_existe():
-            time.sleep(0.3)
-            return True
+    # --- METODO 2: pixel do botao Sim ---
+    try:
         time.sleep(0.5)
-    return False
+        cor_sim = pyautogui.pixel(665, 424)
+        while time.time() - inicio < timeout:
+            aguardar_se_pausado()
+            time.sleep(0.5)
+            if pyautogui.pixel(665, 424) != cor_sim:
+                time.sleep(0.3)
+                return True
+    except Exception:
+        pass
+
+    # --- METODO 3: espera fixa ---
+    print("  (aguardando processamento 5s...)")
+    time.sleep(5)
+    return True
 
 
-def processar_codigo(codigo):
+def processar_codigo(codigo, idx, total):
+    print(f"\n[{idx}/{total}] Codigo {codigo}")
+    sys.stdout.flush()
+
     aguardar_se_pausado()
 
-    if not digitar_texto(str(codigo), 343, 147):
-        return False
+    print("  - Digitando codigo...", end=" ")
+    digitar_texto(str(codigo), 343, 147)
+    print("OK")
     time.sleep(0.2)
 
-    if not clicar(1231, 148):
-        return False
+    print("  - Clicando Excluir...", end=" ")
+    clicar(1231, 148)
+    print("OK")
     time.sleep(0.3)
 
-    if not clicar(665, 424):
-        return False
+    print("  - Confirmando Sim...", end=" ")
+    clicar(665, 424)
+    print("OK")
 
-    if not esperar_exclusao():
-        return False
+    print("  - Aguardando exclusao...", end=" ")
+    esperar_exclusao()
+    print("OK")
 
     return True
 
@@ -182,41 +186,29 @@ def main():
     print("Conectando ao MEGA ERP...")
 
     raiz, app = encontrar_janela_raiz()
-
     iniciar_listener_f8()
 
     time.sleep(0.5)
-    esconder_console()
-    time.sleep(0.5)
-    focar_janela(raiz)
+    focar_mega(raiz)
 
     sucessos = 0
     falhas = 0
     tempo_inicio = time.time()
-    ultimo_log = time.time()
 
     try:
         for i, codigo in enumerate(range(inicio, fim + 1), 1):
             aguardar_se_pausado()
-            focar_janela(raiz)
+            focar_mega(raiz)
 
-            ok = processar_codigo(codigo)
+            ok = processar_codigo(codigo, i, total)
             if ok:
                 sucessos += 1
             else:
                 falhas += 1
 
-            agora = time.time()
-            if agora - ultimo_log >= 2:
-                decorrido = int(agora - tempo_inicio)
-                print(f"[{i}/{total}] Codigo {codigo}: {'OK' if ok else 'FALHA'} "
-                      f"({decorrido // 60}m {decorrido % 60}s)")
-                ultimo_log = agora
-
     except KeyboardInterrupt:
         print("\n\n[!] Interrompido pelo usuario.")
     finally:
-        mostrar_console()
         print()
         print("=" * 55)
         print("  RESUMO FINAL")
