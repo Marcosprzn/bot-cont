@@ -95,25 +95,92 @@ def clicar(x, y, desc=""):
     return True
 
 
-def esperar_exclusao(timeout=40):
-    """Aguarda o popup de confirmacao fechar. Tenta 3 metodos em cascata."""
+def esperar_carregamento(timeout=20):
+    """Aguarda a tela estabilizar apos clicar Procurar."""
     inicio = time.time()
-
-    # --- METODO 1: UIA (detectar botao 'Sim' pelo nome) ---
     try:
         while time.time() - inicio < timeout:
             aguardar_se_pausado()
             botoes = find_elements(control_type="Button", backend="uia")
-            sim = [b for b in botoes if b.name and "Sim" in b.name]
-            if not sim:
+            for b in botoes:
+                if b.name and ("Sim" in b.name or "Excluir" in b.name):
+                    time.sleep(0.3)
+                    return True
+            time.sleep(0.5)
+    except Exception:
+        pass
+    time.sleep(2)
+    return True
+
+
+def _achar_botao_sim():
+    """Retorna True se o botao 'Sim' estiver visivel na tela."""
+    try:
+        botoes = find_elements(control_type="Button", backend="uia")
+        for b in botoes:
+            if b.name and "Sim" in b.name:
+                return True
+    except Exception:
+        pass
+    return None  # nao conseguiu detectar
+
+
+def esperar_popup_sim(timeout=15):
+    """Aguarda o popup 'Sim' aparecer apos clicar Excluir."""
+    inicio = time.time()
+
+    detectado = _achar_botao_sim()
+    if detectado is True:
+        time.sleep(0.3)
+        return True
+
+    try:
+        while time.time() - inicio < timeout:
+            aguardar_se_pausado()
+            if _achar_botao_sim() is True:
                 time.sleep(0.3)
                 return True
             time.sleep(0.5)
-        return True
     except Exception:
         pass
 
-    # --- METODO 2: pixel do botao Sim ---
+    try:
+        time.sleep(0.5)
+        cor_fundo = pyautogui.pixel(665, 424)
+        while time.time() - inicio < timeout:
+            aguardar_se_pausado()
+            time.sleep(0.5)
+            if pyautogui.pixel(665, 424) != cor_fundo:
+                time.sleep(0.3)
+                return True
+    except Exception:
+        pass
+
+    time.sleep(2)
+    return True
+
+
+def esperar_exclusao(timeout=40):
+    """Aguarda o popup de confirmacao fechar."""
+    inicio = time.time()
+
+    detectado = _achar_botao_sim()
+    if detectado is False:
+        time.sleep(0.3)
+        return True
+    if detectado is None:
+        pass
+
+    try:
+        while time.time() - inicio < timeout:
+            aguardar_se_pausado()
+            if _achar_botao_sim() is False:
+                time.sleep(0.3)
+                return True
+            time.sleep(0.5)
+    except Exception:
+        pass
+
     try:
         time.sleep(0.5)
         cor_sim = pyautogui.pixel(665, 424)
@@ -126,7 +193,6 @@ def esperar_exclusao(timeout=40):
     except Exception:
         pass
 
-    # --- METODO 3: espera fixa ---
     print("  (aguardando processamento 5s...)")
     time.sleep(5)
     return True
@@ -141,17 +207,22 @@ def processar_codigo(codigo, idx, total):
     print("  - Digitando codigo...", end=" ")
     digitar_texto(str(codigo), 343, 147)
     print("OK")
-    time.sleep(0.2)
 
     print("  - Clicando Procurar...", end=" ")
     clicar(433, 142)
     print("OK")
-    time.sleep(0.3)
+
+    print("  - Aguardando carregamento...", end=" ")
+    esperar_carregamento()
+    print("OK")
 
     print("  - Clicando Excluir...", end=" ")
     clicar(1231, 148)
     print("OK")
-    time.sleep(0.3)
+
+    print("  - Aguardando popup Sim...", end=" ")
+    esperar_popup_sim()
+    print("OK")
 
     print("  - Confirmando Sim...", end=" ")
     clicar(665, 424)
