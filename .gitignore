@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+*.egg
+
+# Ambiente virtual
+venv/
+.venv/
+env/
+
+# IDE
+.vs/
+.vscode/
+.idea/
+
+# Temporarios
+*.tmp
+*.log
