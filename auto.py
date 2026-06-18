@@ -12,11 +12,62 @@ from pywinauto.findwindows import find_elements
 
 LOG_DIR = os.path.dirname(os.path.abspath(__file__))
 LOG_ERRO = os.path.join(LOG_DIR, "erro_auto.txt")
-LOG_PROGRESSO = os.path.join(LOG_DIR, "progresso.log")
-LOG_PROGRESSO_TEMP = os.path.join(LOG_DIR, "progresso.tmp")
+LOG_PROGRESSO = os.path.join(LOG_DIR, "progresso.tmp")
 
 pausado = False
 console_oculto = False
+
+# --- TEMPORIZADOR ADAPTATIVO ---
+# Historico de tempo REAL gasto em cada etapa (segundos)
+HIST = {
+    "procurar": [2.5],
+    "popup":    [1.5],
+    "exclusao": [4.0],
+}
+FLOOR = {"procurar": 0.5, "popup": 0.3, "exclusao": 1.0}
+PRIMEIRO = True
+INICIO_CODIGO = 0.0
+
+
+def media(arr):
+    return sum(arr) / len(arr)
+
+
+def esperar(etapa):
+    """Espera o tempo adequado para a etapa, baseado no historico."""
+    arr = HIST[etapa]
+    t = max(FLOOR[etapa], media(arr))
+    time.sleep(t)
+    return t
+
+
+def registrar_etapa(etapa, t_gasto):
+    """Registra quanto tempo a etapa realmente demorou e recalcula."""
+    arr = HIST[etapa]
+    arr.append(t_gasto)
+    if len(arr) > 5:
+        arr.pop(0)
+
+
+def recalcular_apos_primeiro():
+    """Apos o primeiro codigo, ajusta tempos para 70% do total medido."""
+    global HIST
+    total = time.time() - INICIO_CODIGO
+    terco = max(0.5, total / 3)
+    HIST["procurar"] = [terco, terco * 0.9]
+    HIST["popup"]    = [terco * 0.8, terco * 0.7]
+    HIST["exclusao"] = [terco * 1.2, terco * 1.1]
+
+
+def reduzir_tempos():
+    """Reduz gradualmente os tempos (3% por iteracao bem sucedida)."""
+    for k in HIST:
+        arr = HIST[k]
+        novo = [max(FLOOR[k], v * 0.97) for v in arr]
+        HIST[k] = novo
+
+
+# --- FIM TEMPORIZADOR ---
 
 
 def alternar_pausa():
@@ -54,7 +105,7 @@ def _mostrar_console():
 def p(msg, end="\n"):
     timestamp = datetime.now().strftime("%H:%M:%S")
     if console_oculto:
-        with open(LOG_PROGRESSO_TEMP, "a", encoding="utf-8") as f:
+        with open(LOG_PROGRESSO, "a", encoding="utf-8") as f:
             f.write(f"[{timestamp}] {msg}{end}")
     else:
         print(msg, end=end)
@@ -119,90 +170,57 @@ def digitar_texto(texto, x, y):
     return True
 
 
-def clicar(x, y, desc=""):
+def clicar(x, y):
     aguardar_se_pausado()
     pyautogui.click(x, y)
     return True
 
 
-def esperar_carregamento():
-    """Aguarda a tela estabilizar apos clicar Procurar."""
-    p("buscando... ", end="")
-    time.sleep(2)
-    return True
-
-
-def esperar_popup_sim(timeout=15):
-    """Aguarda o popup 'Sim' aparecer apos clicar Excluir (por pixel)."""
-    inicio = time.time()
-    time.sleep(0.5)
-    try:
-        cor_fundo = pyautogui.pixel(665, 424)
-        while time.time() - inicio < timeout:
-            aguardar_se_pausado()
-            cor_atual = pyautogui.pixel(665, 424)
-            if cor_atual != cor_fundo:
-                time.sleep(0.2)
-                return True
-            time.sleep(0.3)
-    except Exception:
-        pass
-    time.sleep(2)
-    return True
-
-
-def esperar_exclusao(timeout=40):
-    """Aguarda o popup 'Sim' fechar apos confirmar exclusao (por pixel)."""
-    inicio = time.time()
-    time.sleep(0.5)
-    try:
-        cor_sim = pyautogui.pixel(665, 424)
-        while time.time() - inicio < timeout:
-            aguardar_se_pausado()
-            cor_atual = pyautogui.pixel(665, 424)
-            if cor_atual != cor_sim:
-                time.sleep(0.3)
-                return True
-            time.sleep(0.5)
-    except Exception:
-        pass
-    p("(aguardando 5s...) ", end="")
-    time.sleep(5)
-    return True
-
-
 def processar_codigo(codigo, idx, total):
+    global PRIMEIRO, INICIO_CODIGO
+
+    INICIO_CODIGO = time.time()
     p(f"\n[{idx}/{total}] Codigo {codigo}")
 
     aguardar_se_pausado()
 
-    p("  - Digitando codigo... ", end="")
+    # --- DIGITAR ---
+    p("  1/5 codigo... ", end="")
     digitar_texto(str(codigo), 343, 147)
     p("OK")
 
-    p("  - Clicando Procurar... ", end="")
+    # --- PROCURAR ---
+    p("  2/5 Procurar... ", end="")
     clicar(433, 142)
-    p("OK")
+    t = esperar("procurar")
+    registrar_etapa("procurar", time.time() - INICIO_CODIGO)
+    p(f"({t:.1f}s) OK")
 
-    p("  - Aguardando carregamento... ", end="")
-    esperar_carregamento()
-    p("OK")
-
-    p("  - Clicando Excluir... ", end="")
+    # --- EXCLUIR ---
+    p("  3/5 Excluir... ", end="")
     clicar(1231, 148)
-    p("OK")
+    t = esperar("popup")
+    registrar_etapa("popup", time.time() - INICIO_CODIGO)
+    p(f"({t:.1f}s) OK")
 
-    p("  - Aguardando popup Sim... ", end="")
-    esperar_popup_sim()
-    p("OK")
-
-    p("  - Confirmando Sim... ", end="")
+    # --- SIM ---
+    p("  4/5 Sim... ", end="")
     clicar(665, 424)
     p("OK")
 
-    p("  - Aguardando exclusao... ", end="")
-    esperar_exclusao()
-    p("OK")
+    # --- AGUARDAR EXCLUSAO ---
+    p("  5/5 excluindo... ", end="")
+    t = esperar("exclusao")
+    registrar_etapa("exclusao", time.time() - INICIO_CODIGO)
+    p(f"({t:.1f}s) OK")
+
+    # --- AJUSTES POS-CODIGO ---
+    if PRIMEIRO:
+        recalcular_apos_primeiro()
+        PRIMEIRO = False
+        p(f"  >> Calibrado! Proximos serao mais rapidos.")
+    else:
+        reduzir_tempos()
 
     return True
 
@@ -213,6 +231,7 @@ def main():
 
     print("=" * 55)
     print("  BOT MEGA ERP - Exclusao em Lote")
+    print("  (Adaptativo: fica mais rapido a cada codigo)")
     print("=" * 55)
     print("  F8 = Pausar / Continuar")
     print("  Ctrl+C = Parar")
@@ -235,7 +254,6 @@ def main():
 
     raiz, app = encontrar_janela_raiz()
     iniciar_listener_f8()
-
     focar_mega(raiz)
 
     print("Iniciando em 5 segundos... Mova o mouse para o MEGA ERP.")
@@ -243,8 +261,7 @@ def main():
         print(f"  {s}...")
         time.sleep(1)
 
-    # limpa log de progresso e esconde console
-    with open(LOG_PROGRESSO_TEMP, "w", encoding="utf-8") as f:
+    with open(LOG_PROGRESSO, "w", encoding="utf-8") as f:
         f.write(f"Progresso: {inicio} ate {fim} ({total} codigos)\n\n")
     time.sleep(0.3)
     focar_mega(raiz)
@@ -255,13 +272,12 @@ def main():
 
     sucessos = 0
     falhas = 0
-    tempo_inicio = time.time()
+    tempo_geral = time.time()
 
     try:
         for i, codigo in enumerate(range(inicio, fim + 1), 1):
             aguardar_se_pausado()
             focar_mega(raiz)
-
             ok = processar_codigo(codigo, i, total)
             if ok:
                 sucessos += 1
@@ -273,7 +289,7 @@ def main():
     finally:
         _mostrar_console()
         time.sleep(0.5)
-        decorrido = int(time.time() - tempo_inicio)
+        decorrido = int(time.time() - tempo_geral)
         print()
         print("=" * 55)
         print("  RESUMO FINAL")
@@ -282,7 +298,9 @@ def main():
         print(f"  Sucessos:          {sucessos}")
         print(f"  Falhas:            {falhas}")
         print(f"  Tempo total:       {decorrido // 60}m {decorrido % 60}s")
-        print(f"  Log de progresso:  {LOG_PROGRESSO_TEMP}")
+        if sucessos > 0:
+            print(f"  Media por codigo:  {decorrido / sucessos:.1f}s")
+        print(f"  Log de progresso:  {LOG_PROGRESSO}")
         print("=" * 55)
         input("Pressione Enter para sair...")
 
