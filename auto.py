@@ -17,14 +17,39 @@ LOG_PROGRESSO = os.path.join(LOG_DIR, "progresso.tmp")
 pausado = False
 console_oculto = False
 
-# --- TEMPORIZADOR ADAPTATIVO ---
-# Historico de tempo REAL gasto em cada etapa (segundos)
-HIST = {
-    "procurar": [2.5],
-    "popup":    [1.5],
-    "exclusao": [4.0],
+# --- CONFIGURACOES DAS AUTOMACOES ---
+MODOS = {
+    1: {
+        "nome": "Primaria",
+        "passos": [
+            ("campo",    343,  147, "codigo"),
+            ("procurar", 433,  142, "Procurar"),
+            ("excluir",  1231, 148, "Excluir"),
+            ("sim",      665,  424, "Sim"),
+        ],
+        "esperas": ["procurar", "popup", "exclusao"],
+        "tempos_iniciais": {"procurar": 2.5, "popup": 1.5, "exclusao": 4.0},
+        "pisos":           {"procurar": 0.5, "popup": 0.3, "exclusao": 1.0},
+    },
+    2: {
+        "nome": "Secundaria",
+        "passos": [
+            ("campo",     343,  147, "codigo"),
+            ("procurar",  409,  147, "Procurar"),
+            ("aplicar",   815,  627, "Aplicar"),
+            ("selecionar",1034, 587, "Selecionar"),
+            ("excluir",   1248, 144, "Excluir"),
+            ("sim",       771,  420, "Sim"),
+        ],
+        "esperas": ["procurar", "popup", "exclusao"],
+        "tempos_iniciais": {"procurar": 2.5, "popup": 2.0, "exclusao": 4.0},
+        "pisos":           {"procurar": 0.5, "popup": 0.3, "exclusao": 1.0},
+    },
 }
-FLOOR = {"procurar": 0.5, "popup": 0.3, "exclusao": 1.0}
+
+MODO = 1         # modo ativo
+HIST = {}        # historico de tempos do modo ativo
+FLOOR = {}       # pisos do modo ativo
 PRIMEIRO = True
 INICIO_CODIGO = 0.0
 
@@ -33,8 +58,17 @@ def media(arr):
     return sum(arr) / len(arr)
 
 
+def configurar_modo(modo):
+    """Inicializa historico e pisos para o modo escolhido."""
+    global MODO, HIST, FLOOR, PRIMEIRO
+    cfg = MODOS[modo]
+    MODO = modo
+    HIST = {k: [v] for k, v in cfg["tempos_iniciais"].items()}
+    FLOOR = cfg["pisos"].copy()
+    PRIMEIRO = True
+
+
 def esperar(etapa):
-    """Espera o tempo adequado para a etapa, baseado no historico."""
     arr = HIST[etapa]
     t = max(FLOOR[etapa], media(arr))
     time.sleep(t)
@@ -42,7 +76,6 @@ def esperar(etapa):
 
 
 def registrar_etapa(etapa, t_gasto):
-    """Registra quanto tempo a etapa realmente demorou e recalcula."""
     arr = HIST[etapa]
     arr.append(t_gasto)
     if len(arr) > 5:
@@ -50,24 +83,31 @@ def registrar_etapa(etapa, t_gasto):
 
 
 def recalcular_apos_primeiro():
-    """Apos o primeiro codigo, ajusta tempos para 70% do total medido."""
     global HIST
+    cfg = MODOS[MODO]
     total = time.time() - INICIO_CODIGO
-    terco = max(0.5, total / 3)
-    HIST["procurar"] = [terco, terco * 0.9]
-    HIST["popup"]    = [terco * 0.8, terco * 0.7]
-    HIST["exclusao"] = [terco * 1.2, terco * 1.1]
+    n = len(cfg["esperas"])
+    parte = max(0.5, total / n)
+    for k in cfg["esperas"]:
+        HIST[k] = [parte, parte * 0.9]
 
 
 def reduzir_tempos():
-    """Reduz gradualmente os tempos (3% por iteracao bem sucedida)."""
     for k in HIST:
         arr = HIST[k]
         novo = [max(FLOOR[k], v * 0.97) for v in arr]
         HIST[k] = novo
 
 
-# --- FIM TEMPORIZADOR ---
+def passo_exige_espera(passo):
+    """Retorna a chave de espera se o passo exige, ou None."""
+    if passo[0] == "procurar":  return "procurar"
+    if passo[0] == "excluir":   return "popup"
+    if passo[0] == "sim":       return "exclusao"
+    return None
+
+
+# --- FIM CONFIG ---
 
 
 def alternar_pausa():
@@ -182,39 +222,37 @@ def processar_codigo(codigo, idx, total):
     global PRIMEIRO, INICIO_CODIGO
 
     INICIO_CODIGO = time.time()
+    cfg = MODOS[MODO]
+    passos = cfg["passos"]
+    n = len(passos)
+
     p(f"\n[{idx}/{total}] Codigo {codigo}")
 
     aguardar_se_pausado()
 
-    # --- DIGITAR ---
-    p("  1/5 codigo... ", end="")
-    digitar_texto(str(codigo), 343, 147)
-    p("OK")
+    for i, passo in enumerate(passos, 1):
+        tipo, x, y, nome = passo
+        aguardar_se_pausado()
 
-    # --- PROCURAR ---
-    p("  2/5 Procurar... ", end="")
-    clicar(433, 142)
-    t = esperar("procurar")
-    registrar_etapa("procurar", time.time() - INICIO_CODIGO)
-    p(f"({t:.1f}s) OK")
+        if tipo == "campo":
+            p(f"  {i}/{n} {nome}... ", end="")
+            digitar_texto(str(codigo), x, y)
+            p("OK")
+        else:
+            chave_espera = passo_exige_espera(passo)
+            if chave_espera:
+                p(f"  {i}/{n} {nome}... ", end="")
+            else:
+                p(f"  {i}/{n} {nome}... ", end="")
 
-    # --- EXCLUIR ---
-    p("  3/5 Excluir... ", end="")
-    clicar(1231, 148)
-    t = esperar("popup")
-    registrar_etapa("popup", time.time() - INICIO_CODIGO)
-    p(f"({t:.1f}s) OK")
+            clicar(x, y)
 
-    # --- SIM ---
-    p("  4/5 Sim... ", end="")
-    clicar(665, 424)
-    p("OK")
-
-    # --- AGUARDAR EXCLUSAO ---
-    p("  5/5 excluindo... ", end="")
-    t = esperar("exclusao")
-    registrar_etapa("exclusao", time.time() - INICIO_CODIGO)
-    p(f"({t:.1f}s) OK")
+            if chave_espera:
+                t = esperar(chave_espera)
+                registrar_etapa(chave_espera, time.time() - INICIO_CODIGO)
+                p(f"({t:.1f}s) OK")
+            else:
+                p("OK")
 
     # --- AJUSTES POS-CODIGO ---
     if PRIMEIRO:
@@ -240,6 +278,21 @@ def main():
     print("=" * 55)
     print()
 
+    print("Selecione o modo:")
+    for k, v in MODOS.items():
+        print(f"  {k} - Automacao {v['nome']}")
+    try:
+        escolha = int(input("Modo (1 ou 2): ").strip())
+        if escolha not in MODOS:
+            print("Modo invalido. Usando modo 1.")
+            escolha = 1
+    except ValueError:
+        print("Entrada invalida. Usando modo 1.")
+        escolha = 1
+
+    configurar_modo(escolha)
+    cfg = MODOS[escolha]
+
     try:
         inicio = int(input("Digite o CODIGO INICIAL: ").strip())
         fim = int(input("Digite o CODIGO FINAL:   ").strip())
@@ -251,7 +304,7 @@ def main():
         inicio, fim = fim, inicio
 
     total = fim - inicio + 1
-    print(f"\nProcessando {total} codigos: {inicio} ate {fim}")
+    print(f"\nModo: {cfg['nome']} | {total} codigos: {inicio} ate {fim}")
     print("Conectando ao MEGA ERP...")
 
     raiz, app = encontrar_janela_raiz()
@@ -264,7 +317,7 @@ def main():
         time.sleep(1)
 
     with open(LOG_PROGRESSO, "w", encoding="utf-8") as f:
-        f.write(f"Progresso: {inicio} ate {fim} ({total} codigos)\n\n")
+        f.write(f"Modo: {cfg['nome']} | {inicio} ate {fim} ({total} codigos)\n\n")
     time.sleep(0.3)
     focar_mega(raiz)
     time.sleep(0.3)
